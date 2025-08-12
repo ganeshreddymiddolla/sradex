@@ -17,7 +17,11 @@ const SESSION_SECRET = process.env.SESSION_SECRET; // A new secret for signing s
 const users = {};
 
 // --- MIDDLEWARE SETUP ---
-app.use(cors()); // Enable CORS for all routes
+app.use(cors({
+    origin: 'https://sradexlearning.com', // your frontend domain
+    credentials: true // ✅ allow cookies
+}));
+ // Enable CORS for all routes
 app.use(express.json()); // Parse JSON bodies
 app.use(cookieParser()); // Parse cookies from incoming requests
 
