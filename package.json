@@ -1,7 +1,7 @@
 {
-  "name": "sradex-google-login",
+  "name": "sradex-google-singleorigin",
   "version": "1.0.0",
-  "description": "SRadex Google Login (single-origin) example",
+  "description": "Single-origin Google OAuth demo (serves frontend + backend together)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
