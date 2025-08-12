@@ -1,3 +1,5 @@
+// server.js
+require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
@@ -7,50 +9,57 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- SECURITY: Load secrets from environment variables ---
+// ---------------- CONFIG ----------------
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-// --- Temporary in-memory "database" ---
+// Default to localhost in dev, or use production SITE_URL from env
+const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
+const REDIRECT_URI = `${SITE_URL.replace(/\/$/, '')}/auth/google/callback`;
+
+// ---------------- TEMP DATABASE ----------------
 const users = {};
 
-// --- MIDDLEWARE ---
+// ---------------- MIDDLEWARE ----------------
 app.use(cors({
-    origin: 'https://sradexlearning.com', // frontend domain
-    credentials: true // allow cookies
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Change in production
+    credentials: true
 }));
 
 app.use(express.json());
 app.use(cookieParser());
-
 app.use(session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,         // requires HTTPS
+        secure: SITE_URL.startsWith('https'), // Only secure in production
         httpOnly: true,
-        sameSite: 'none',     // allow cross-site
+        sameSite: 'none', // Required for cross-site cookies
         maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
 }));
 
-// --- AUTHENTICATION ROUTES ---
+// ---------------- AUTH ROUTES ----------------
 
-// 1. Start Google OAuth login
+// Step 1: Redirect user to Google
 app.get('/auth/google', (req, res) => {
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', 'https://sradex.onrender.com/auth/google/callback');
+    authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', 'openid profile email');
     res.redirect(authUrl.toString());
 });
 
-// 2. Handle Google callback
+// Step 2: Handle Google callback
 app.get('/auth/google/callback', async (req, res) => {
     const { code } = req.query;
+    if (!code) {
+        return res.redirect(`${process.env.FRONTEND_URL}/sampleloginbuttun.html`);
+    }
+
     try {
         // Exchange code for token
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -60,19 +69,21 @@ app.get('/auth/google/callback', async (req, res) => {
                 code,
                 client_id: GOOGLE_CLIENT_ID,
                 client_secret: GOOGLE_CLIENT_SECRET,
-                redirect_uri: 'https://sradex.onrender.com/auth/google/callback',
+                redirect_uri: REDIRECT_URI,
                 grant_type: 'authorization_code',
             }),
         });
         const tokenData = await tokenResponse.json();
+        if (!tokenData.access_token) throw new Error('Failed to get access token');
 
-        // Fetch user profile
+        // Get user info
         const userResponse = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
-            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+            headers: { Authorization: `Bearer ${tokenData.access_token}` },
         });
         const profile = await userResponse.json();
+        if (!profile.id) throw new Error('Failed to fetch profile');
 
-        // Store user
+        // Save in "database"
         users[profile.id] = {
             id: profile.id,
             name: profile.name,
@@ -83,37 +94,36 @@ app.get('/auth/google/callback', async (req, res) => {
         // Create session
         req.session.userId = profile.id;
 
-        // Redirect to dashboard
-        res.redirect('https://sradexlearning.com/sampleprofile.html');
-
-    } catch (error) {
-        console.error('Error during Google callback:', error);
-        res.redirect('https://sradexlearning.com/sampleloginbuttun.html');
+        // Redirect to profile dashboard
+        res.redirect(`${process.env.FRONTEND_URL}/sampleprofile.html`);
+    } catch (err) {
+        console.error('Google login error:', err);
+        res.redirect(`${process.env.FRONTEND_URL}/sampleloginbuttun.html`);
     }
 });
 
-// 3. Logout
+// Step 3: Logout
 app.get('/auth/logout', (req, res) => {
     req.session.destroy(err => {
-        if (err) return res.status(500).send("Could not log out.");
-        res.clearCookie('connect.sid', { sameSite: 'none', secure: true });
-        res.redirect('https://sradexlearning.com/sampleloginbuttun.html');
+        if (err) return res.status(500).send('Could not log out.');
+        res.clearCookie('connect.sid', { sameSite: 'none', secure: SITE_URL.startsWith('https') });
+        res.redirect(`${process.env.FRONTEND_URL}/sampleloginbuttun.html`);
     });
 });
 
-// --- PROTECTED ROUTE ---
+// ---------------- PROTECTED ROUTE ----------------
 const isLoggedIn = (req, res, next) => {
-    if (req.session.userId) next();
-    else res.status(401).json({ error: 'Unauthorized: Please log in.' });
+    if (req.session.userId) return next();
+    res.status(401).json({ error: 'Unauthorized: Please log in.' });
 };
 
 app.get('/api/profile', isLoggedIn, (req, res) => {
     const user = users[req.session.userId];
-    if (user) res.json(user);
-    else res.status(404).json({ error: 'User not found.' });
+    if (user) return res.json(user);
+    res.status(404).json({ error: 'User not found.' });
 });
 
-// --- SERVER LISTENER ---
+// ---------------- START SERVER ----------------
 app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`✅ Server running at ${SITE_URL}`);
 });
