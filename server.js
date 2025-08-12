@@ -1,23 +1,55 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
-const app = express();
+const session = require('express-session'); // For managing user sessions
+const cookieParser = require('cookie-parser'); // To parse cookies
 
+const app = express();
 const PORT = process.env.PORT || 3000;
+
+// --- SECURITY: Load secrets from environment variables ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const SESSION_SECRET = process.env.SESSION_SECRET; // A new secret for signing session cookies
 
-// IMPORTANT: Use CORS middleware here, before your routes
-app.use(cors());
-app.use(express.json());
+// --- In-memory "database" for demonstration purposes ---
+// In a real app, you would use a proper database like PostgreSQL or MongoDB.
+const users = {};
 
-app.post('/api/exchange-code', async (req, res) => {
+// --- MIDDLEWARE SETUP ---
+app.use(cors()); // Enable CORS for all routes
+app.use(express.json()); // Parse JSON bodies
+app.use(cookieParser()); // Parse cookies from incoming requests
+
+// Session Middleware: Creates a `req.session` object for each user
+app.use(session({
+    secret: SESSION_SECRET, // A secret key to sign the session ID cookie
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: 'auto', httpOnly: true, maxAge: 24 * 60 * 60 * 1000 } // 1 day
+}));
+
+
+// --- AUTHENTICATION ROUTES ---
+
+// 1. /auth/google: The starting point for the login process.
+//    Redirects the user to Google's consent screen.
+app.get('/auth/google', (req, res) => {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', 'https://sradex.onrender.com/auth/google/callback'); // The URL this server will handle
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', 'openid profile email');
+    res.redirect(authUrl.toString());
+});
+
+// 2. /auth/google/callback: Google redirects here after user gives consent.
+//    We exchange the code for user info, create a session, and redirect to the dashboard.
+app.get('/auth/google/callback', async (req, res) => {
+    const { code } = req.query;
+
     try {
-        const { code } = req.body;
-        if (!code) {
-            return res.status(400).json({ error: 'Authorization code is missing.' });
-        }
-
+        // Exchange code for an access token
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -25,32 +57,77 @@ app.post('/api/exchange-code', async (req, res) => {
                 code: code,
                 client_id: GOOGLE_CLIENT_ID,
                 client_secret: GOOGLE_CLIENT_SECRET,
-                redirect_uri: 'https://sradexlearning.com/sampleprofile.html',
+                redirect_uri: 'https://sradex.onrender.com/auth/google/callback',
                 grant_type: 'authorization_code',
             }),
         });
-
         const tokenData = await tokenResponse.json();
-        if (tokenData.error) {
-            return res.status(400).json({ error: tokenData.error_description });
-        }
-        
+
+        // Use token to get user's profile info
         const userResponse = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
         });
+        const profile = await userResponse.json();
 
-        const userData = await userResponse.json();
-        res.json({
-            name: userData.name,
-            email: userData.email,
-        });
+        // Find or create user in our "database"
+        users[profile.id] = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            photoUrl: profile.picture
+        };
+
+        // *** IMPORTANT: Create the session ***
+        // We store the user's ID in the session object.
+        // The session middleware automatically sends a cookie to the browser.
+        req.session.userId = profile.id;
+
+        // Redirect the user to the protected dashboard
+        res.redirect('https://sradexlearning.com/dashboard.html');
 
     } catch (error) {
-        console.error('Server error:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Error during Google callback:', error);
+        res.redirect('/login.html'); // On error, send back to login
     }
 });
 
+// 3. /auth/logout: Destroys the session and logs the user out.
+app.get('/auth/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send("Could not log out.");
+        }
+        // Clears the session cookie
+        res.clearCookie('connect.sid'); 
+        // Redirect to the public login page
+        res.redirect('https://sradexlearning.com/login.html');
+    });
+});
+
+
+// --- PROTECTED API ROUTE ---
+
+// This middleware function checks if a user is logged in before allowing access to a route.
+const isLoggedIn = (req, res, next) => {
+    if (req.session.userId) {
+        next(); // User is logged in, proceed to the next function
+    } else {
+        res.status(401).json({ error: 'Unauthorized: Please log in.' }); // User is not logged in
+    }
+};
+
+// /api/profile: A protected route that only logged-in users can access.
+app.get('/api/profile', isLoggedIn, (req, res) => {
+    const user = users[req.session.userId];
+    if (user) {
+        res.json(user);
+    } else {
+        res.status(404).json({ error: 'User not found.' });
+    }
+});
+
+
+// --- SERVER LISTENER ---
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
