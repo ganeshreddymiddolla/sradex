@@ -8,7 +8,7 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==================== CONFIG ====================
+// ==================== CONFIG ==================== 
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || `http://localhost:5500`; 
 // Example for production:
