@@ -18,26 +18,27 @@ const users = {};
 
 // --- MIDDLEWARE SETUP ---
 app.use(cors({
-    origin: 'https://sradexlearning.com', // your frontend domain
-    credentials: true // ✅ allow cookies
+    origin: 'https://sradexlearning.com', // your front-end domain
+    credentials: true
 }));
+
  // Enable CORS for all routes
 app.use(express.json()); // Parse JSON bodies
 app.use(cookieParser()); // Parse cookies from incoming requests
 
 // Session Middleware: Creates a `req.session` object for each user
 app.use(session({
-    secret: SESSION_SECRET, // A secret key to sign the session ID cookie
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-    secure: true, // ✅ required for HTTPS
-    httpOnly: true,
-    sameSite: 'none', // ✅ allow cross-site cookies
-    maxAge: 24 * 60 * 60 * 1000
-}
-
+        secure: true,         // needs HTTPS
+        httpOnly: true,
+        sameSite: 'none',     // allow cross-site
+        maxAge: 24 * 60 * 60 * 1000
+    }
 }));
+
 
 
 // --- AUTHENTICATION ROUTES ---
