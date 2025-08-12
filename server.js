@@ -30,7 +30,13 @@ app.use(session({
     secret: SESSION_SECRET, // A secret key to sign the session ID cookie
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: 'auto', httpOnly: true, maxAge: 24 * 60 * 60 * 1000 } // 1 day
+    cookie: {
+    secure: true, // ✅ required for HTTPS
+    httpOnly: true,
+    sameSite: 'none', // ✅ allow cross-site cookies
+    maxAge: 24 * 60 * 60 * 1000
+}
+
 }));
 
 
