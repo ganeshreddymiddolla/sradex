@@ -4,13 +4,18 @@ const fetch = require('node-fetch');
 const cors = require('cors');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
- 
-const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
-const REDIRECT_URI = `${SITE_URL.replace(/\/$/, '')}/auth/google/callback`;
+
+// ==================== CONFIG ====================
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
+const FRONTEND_URL = process.env.FRONTEND_URL || `http://localhost:5500`; 
+// Example for production:
+// FRONTEND_URL=https://sradexlearning.com
+// BACKEND_URL=https://sradex.onrender.com
+
+const REDIRECT_URI = `${BACKEND_URL.replace(/\/$/, '')}/auth/google/callback`;
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -23,8 +28,9 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
 
 const users = {};
 
+// ==================== MIDDLEWARE ====================
 app.use(cors({
-  origin: SITE_URL,
+  origin: FRONTEND_URL,
   credentials: true
 }));
 app.use(express.json());
@@ -34,17 +40,16 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: SITE_URL.startsWith('https'),
+    secure: BACKEND_URL.startsWith('https'),
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'none', // allow cross-site
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
-// Serve HTML files from root
-app.use(express.static(__dirname));
+// ==================== AUTH ROUTES ====================
 
-// Start Google login
+// 1️⃣ Start Google login
 app.get('/auth/google', (req, res) => {
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
@@ -54,7 +59,7 @@ app.get('/auth/google', (req, res) => {
   res.redirect(authUrl.toString());
 });
 
-// Google OAuth callback
+// 2️⃣ Google OAuth callback
 app.get('/auth/google/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('Missing code');
@@ -88,34 +93,36 @@ app.get('/auth/google/callback', async (req, res) => {
     };
 
     req.session.userId = profile.id;
-    res.redirect('/sampleproject.html');
+    // ✅ Redirect to frontend dashboard page
+    res.redirect(`${FRONTEND_URL}/sampleproject.html`);
   } catch (err) {
     console.error('OAuth error:', err);
-    res.redirect('/sampleloginbuttun.html');
+    res.redirect(`${FRONTEND_URL}/sampleloginbuttun.html`);
   }
 });
 
-// Logout
+// 3️⃣ Logout
 app.get('/auth/logout', (req, res) => {
   req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    res.redirect('/sampleloginbuttun.html');
+    res.clearCookie('connect.sid', { sameSite: 'none', secure: true });
+    res.redirect(`${FRONTEND_URL}/sampleloginbuttun.html`);
   });
 });
 
-// Check login
+// ==================== API ROUTES ====================
 const isLoggedIn = (req, res, next) => {
   if (req.session.userId) return next();
   res.status(401).json({ error: 'Unauthorized' });
 };
 
-// API route
 app.get('/api/profile', isLoggedIn, (req, res) => {
   const user = users[req.session.userId];
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 });
 
+// ==================== START SERVER ====================
 app.listen(PORT, () => {
-  console.log(`✅ Server running at ${SITE_URL}`);
+  console.log(`✅ Backend running at ${BACKEND_URL}`);
+  console.log(`🌐 Frontend expected at ${FRONTEND_URL}`);
 });
