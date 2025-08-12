@@ -1,8 +1,8 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
-const session = require('express-session'); // For managing user sessions
-const cookieParser = require('cookie-parser'); // To parse cookies
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,62 +10,54 @@ const PORT = process.env.PORT || 3000;
 // --- SECURITY: Load secrets from environment variables ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const SESSION_SECRET = process.env.SESSION_SECRET; // A new secret for signing session cookies
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
-// --- In-memory "database" for demonstration purposes ---
-// In a real app, you would use a proper database like PostgreSQL or MongoDB.
+// --- Temporary in-memory "database" ---
 const users = {};
 
-// --- MIDDLEWARE SETUP ---
+// --- MIDDLEWARE ---
 app.use(cors({
-    origin: 'https://sradexlearning.com', // your front-end domain
-    credentials: true
+    origin: 'https://sradexlearning.com', // frontend domain
+    credentials: true // allow cookies
 }));
 
- // Enable CORS for all routes
-app.use(express.json()); // Parse JSON bodies
-app.use(cookieParser()); // Parse cookies from incoming requests
+app.use(express.json());
+app.use(cookieParser());
 
-// Session Middleware: Creates a `req.session` object for each user
 app.use(session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,         // needs HTTPS
+        secure: true,         // requires HTTPS
         httpOnly: true,
         sameSite: 'none',     // allow cross-site
-        maxAge: 24 * 60 * 60 * 1000
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
 }));
 
-
-
 // --- AUTHENTICATION ROUTES ---
 
-// 1. /auth/google: The starting point for the login process.
-//    Redirects the user to Google's consent screen.
+// 1. Start Google OAuth login
 app.get('/auth/google', (req, res) => {
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', 'https://sradex.onrender.com/auth/google/callback'); // The URL this server will handle
+    authUrl.searchParams.set('redirect_uri', 'https://sradex.onrender.com/auth/google/callback');
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', 'openid profile email');
     res.redirect(authUrl.toString());
 });
 
-// 2. /auth/google/callback: Google redirects here after user gives consent.
-//    We exchange the code for user info, create a session, and redirect to the dashboard.
+// 2. Handle Google callback
 app.get('/auth/google/callback', async (req, res) => {
     const { code } = req.query;
-
     try {
-        // Exchange code for an access token
+        // Exchange code for token
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-                code: code,
+                code,
                 client_id: GOOGLE_CLIENT_ID,
                 client_secret: GOOGLE_CLIENT_SECRET,
                 redirect_uri: 'https://sradex.onrender.com/auth/google/callback',
@@ -74,13 +66,13 @@ app.get('/auth/google/callback', async (req, res) => {
         });
         const tokenData = await tokenResponse.json();
 
-        // Use token to get user's profile info
+        // Fetch user profile
         const userResponse = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
         });
         const profile = await userResponse.json();
 
-        // Find or create user in our "database"
+        // Store user
         users[profile.id] = {
             id: profile.id,
             name: profile.name,
@@ -88,53 +80,38 @@ app.get('/auth/google/callback', async (req, res) => {
             photoUrl: profile.picture
         };
 
-        // *** IMPORTANT: Create the session ***
+        // Create session
         req.session.userId = profile.id;
 
-        // *** FIXED: Redirect to your actual profile page ***
+        // Redirect to dashboard
         res.redirect('https://sradexlearning.com/sampleprofile.html');
 
     } catch (error) {
         console.error('Error during Google callback:', error);
-        // *** FIXED: Redirect to your actual login page on error ***
-        res.redirect('https://sradexlearning.com/sampleloginbuttun.html'); 
+        res.redirect('https://sradexlearning.com/sampleloginbuttun.html');
     }
 });
 
-// 3. /auth/logout: Destroys the session and logs the user out.
+// 3. Logout
 app.get('/auth/logout', (req, res) => {
     req.session.destroy(err => {
-        if (err) {
-            return res.status(500).send("Could not log out.");
-        }
-        res.clearCookie('connect.sid'); 
-        // *** FIXED: Redirect to your actual login page ***
+        if (err) return res.status(500).send("Could not log out.");
+        res.clearCookie('connect.sid', { sameSite: 'none', secure: true });
         res.redirect('https://sradexlearning.com/sampleloginbuttun.html');
     });
 });
 
-
-// --- PROTECTED API ROUTE ---
-
-// This middleware function checks if a user is logged in before allowing access to a route.
+// --- PROTECTED ROUTE ---
 const isLoggedIn = (req, res, next) => {
-    if (req.session.userId) {
-        next(); // User is logged in, proceed to the next function
-    } else {
-        res.status(401).json({ error: 'Unauthorized: Please log in.' }); // User is not logged in
-    }
+    if (req.session.userId) next();
+    else res.status(401).json({ error: 'Unauthorized: Please log in.' });
 };
 
-// /api/profile: A protected route that only logged-in users can access.
 app.get('/api/profile', isLoggedIn, (req, res) => {
     const user = users[req.session.userId];
-    if (user) {
-        res.json(user);
-    } else {
-        res.status(404).json({ error: 'User not found.' });
-    }
+    if (user) res.json(user);
+    else res.status(404).json({ error: 'User not found.' });
 });
-
 
 // --- SERVER LISTENER ---
 app.listen(PORT, () => {
