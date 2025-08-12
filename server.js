@@ -78,16 +78,15 @@ app.get('/auth/google/callback', async (req, res) => {
         };
 
         // *** IMPORTANT: Create the session ***
-        // We store the user's ID in the session object.
-        // The session middleware automatically sends a cookie to the browser.
         req.session.userId = profile.id;
 
-        // Redirect the user to the protected dashboard
-        res.redirect('https://sradexlearning.com/dashboard.html');
+        // *** FIXED: Redirect to your actual profile page ***
+        res.redirect('https://sradexlearning.com/sampleprofile.html');
 
     } catch (error) {
         console.error('Error during Google callback:', error);
-        res.redirect('/login.html'); // On error, send back to login
+        // *** FIXED: Redirect to your actual login page on error ***
+        res.redirect('https://sradexlearning.com/sampleloginbuttun.html'); 
     }
 });
 
@@ -97,10 +96,9 @@ app.get('/auth/logout', (req, res) => {
         if (err) {
             return res.status(500).send("Could not log out.");
         }
-        // Clears the session cookie
         res.clearCookie('connect.sid'); 
-        // Redirect to the public login page
-        res.redirect('https://sradexlearning.com/login.html');
+        // *** FIXED: Redirect to your actual login page ***
+        res.redirect('https://sradexlearning.com/sampleloginbuttun.html');
     });
 });
 
