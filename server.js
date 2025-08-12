@@ -8,7 +8,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+ 
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${SITE_URL.replace(/\/$/, '')}/auth/google/callback`;
 
