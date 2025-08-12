@@ -41,9 +41,10 @@ app.use(session({
   }
 }));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve HTML files from root
+app.use(express.static(__dirname));
 
-// Google OAuth start
+// Start Google login
 app.get('/auth/google', (req, res) => {
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
@@ -87,10 +88,10 @@ app.get('/auth/google/callback', async (req, res) => {
     };
 
     req.session.userId = profile.id;
-    res.redirect('/profile.html');
+    res.redirect('/sampleproject.html');
   } catch (err) {
     console.error('OAuth error:', err);
-    res.redirect('/login.html');
+    res.redirect('/sampleloginbuttun.html');
   }
 });
 
@@ -98,16 +99,17 @@ app.get('/auth/google/callback', async (req, res) => {
 app.get('/auth/logout', (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('connect.sid');
-    res.redirect('/login.html');
+    res.redirect('/sampleloginbuttun.html');
   });
 });
 
-// Protected API
+// Check login
 const isLoggedIn = (req, res, next) => {
   if (req.session.userId) return next();
   res.status(401).json({ error: 'Unauthorized' });
 };
 
+// API route
 app.get('/api/profile', isLoggedIn, (req, res) => {
   const user = users[req.session.userId];
   if (!user) return res.status(404).json({ error: 'User not found' });
