@@ -1,8 +1,11 @@
 {
   "name": "sradex-google-singleorigin",
   "version": "1.0.0",
-  "description": "Single-origin Google OAuth demo (serves frontend + backend together)",
+  "description": "SRadex Google OAuth demo (single-origin) - backend serves frontend",
   "main": "server.js",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "start": "node server.js"
   },
