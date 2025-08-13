@@ -7,11 +7,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- CONFIGURATION ---
-// IMPORTANT: Replace with your actual frontend and backend URLs
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500'; // URL of your live frontend
+// These are now set by environment variables on your hosting platform (e.g., Render)
+const FRONTEND_URL = process.env.FRONTEND_URL;
 const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-
-// Your Google OAuth Credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -19,28 +17,29 @@ const SESSION_SECRET = process.env.SESSION_SECRET;
 // The exact URL Google will redirect to after authentication
 const REDIRECT_URI = `${BACKEND_URL}/auth/google/callback`;
 
-// Check for essential environment variables
-if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET) {
-    console.error('FATAL ERROR: Missing essential environment variables.');
+// Check for essential environment variables on startup
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET || !FRONTEND_URL) {
+    console.error('FATAL ERROR: Missing essential environment variables. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET, and FRONTEND_URL.');
     process.exit(1);
 }
 
 // --- MIDDLEWARE SETUP ---
-// Enable CORS for your frontend
+// Enable CORS for your specific frontend URL
 app.use(cors({
     origin: FRONTEND_URL,
-    credentials: true,
+    credentials: true, // Allow cookies to be sent from the frontend
 }));
 
-// Session middleware configuration
+// Session middleware configuration for production
+app.set('trust proxy', 1); // Trust first proxy, required for secure cookies on Render
 app.use(session({
     secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: false, // Don't create session until something stored
+    saveUninitialized: false, // Don't create session until something is stored
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        secure: true, // Use secure cookies in production (requires HTTPS)
         httpOnly: true, // Prevents client-side JS from accessing the cookie
-        sameSite: 'lax', // Or 'none' if your frontend and backend are on different domains in prod
+        sameSite: 'none', // Necessary for cross-site cookie (frontend/backend on different domains)
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
 }));
@@ -74,9 +73,7 @@ app.get('/auth/google/callback', async (req, res) => {
         // Exchange authorization code for an access token
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 code,
                 client_id: GOOGLE_CLIENT_ID,
@@ -94,9 +91,7 @@ app.get('/auth/google/callback', async (req, res) => {
 
         // Use the access token to get user's profile info
         const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: {
-                Authorization: `Bearer ${tokenData.access_token}`,
-            },
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
         });
 
         const profileData = await profileResponse.json();
@@ -125,7 +120,7 @@ app.get('/auth/logout', (req, res) => {
             return res.status(500).send('Could not log out.');
         }
         res.clearCookie('connect.sid'); // Clears the session cookie
-        res.redirect(FRONTEND_URL + '/login.html');
+        res.redirect(`${FRONTEND_URL}/login.html`);
     });
 });
 
@@ -143,5 +138,5 @@ app.listen(PORT, () => {
     console.log(`✅ Server is running on port ${PORT}`);
     console.log(`🔑 Backend URL: ${BACKEND_URL}`);
     console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
-    console.log(`🔗 Redirect URI: ${REDIRECT_URI}`);
+    console.log(`🔗 Redirect URI configured for Google: ${REDIRECT_URI}`);
 });
