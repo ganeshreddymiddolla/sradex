@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://sradexlearning.com";
 const REDIRECT_URI = `${SITE_URL.replace(/\/$/, "")}/auth/google/callback`;
-  
+   
 // GOOGLE CREDENTIALS (from Render environment variables)
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
