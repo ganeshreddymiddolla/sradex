@@ -6,7 +6,7 @@ const cookieParser = require("cookie-parser");
  
 const app = express();
 const PORT = process.env.PORT || 3000; 
- 
+  
 // SITE CONFIG
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://sradexlearning.com";
