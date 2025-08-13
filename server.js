@@ -7,6 +7,7 @@ const cookieParser = require("cookie-parser");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Your Render URL for backend
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${SITE_URL.replace(/\/$/, '')}/auth/google/callback`;
 
@@ -56,7 +57,6 @@ app.get("/auth/google/callback", async (req, res) => {
   if (!code) return res.redirect("https://sradexlearning.com/sampleloginbuttun.html");
 
   try {
-    // Exchange code for token
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -68,16 +68,15 @@ app.get("/auth/google/callback", async (req, res) => {
         grant_type: "authorization_code"
       })
     });
+
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("No access token");
 
-    // Get user profile
     const profileRes = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
     const profile = await profileRes.json();
 
-    // Store in memory
     users[profile.id] = {
       id: profile.id,
       name: profile.name,
@@ -86,10 +85,7 @@ app.get("/auth/google/callback", async (req, res) => {
     };
 
     req.session.userId = profile.id;
-
-    // Redirect to your hosted profile page
     res.redirect("https://sradexlearning.com/sampleprofile.html");
-
   } catch (err) {
     console.error("OAuth error:", err);
     res.redirect("https://sradexlearning.com/sampleloginbuttun.html");
@@ -104,13 +100,13 @@ app.get("/auth/logout", (req, res) => {
   });
 });
 
-// Check login middleware
+// Middleware for checking login
 const isLoggedIn = (req, res, next) => {
   if (req.session.userId) return next();
   res.status(401).json({ error: "Unauthorized" });
 };
 
-// API: Get profile
+// Get logged in profile
 app.get("/api/profile", isLoggedIn, (req, res) => {
   const user = users[req.session.userId];
   if (!user) return res.status(404).json({ error: "User not found" });
