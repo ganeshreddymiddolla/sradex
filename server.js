@@ -87,7 +87,8 @@ app.get("/auth/google/callback", async (req, res) => {
     };
 
     req.session.userId = profile.id;
-    res.redirect(`${FRONTEND_URL}/sampleproject.html`);
+    res.redirect(`${FRONTEND_URL}/sampleprofile.html');
+`);
   } catch (err) {
     console.error("OAuth error:", err);
     res.redirect(`${FRONTEND_URL}/sampleloginbuttun.html`);
