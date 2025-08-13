@@ -7,7 +7,7 @@ const cookieParser = require("cookie-parser");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Your Render URL for backend
+// Config
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${SITE_URL.replace(/\/$/, '')}/auth/google/callback`;
 
@@ -22,7 +22,7 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET) {
 
 const users = {};
 
-// Middleware
+// Middlewares
 app.use(cors({
   origin: "https://sradexlearning.com",
   credentials: true
@@ -34,20 +34,21 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: SITE_URL.startsWith("https"),
+    secure: true, // cookies only over HTTPS
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "none", // required for cross-site cookies
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
-// Start Google login
+// Start Google OAuth
 app.get("/auth/google", (req, res) => {
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
   authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", "openid profile email");
+  authUrl.searchParams.set("access_type", "offline");
   res.redirect(authUrl.toString());
 });
 
