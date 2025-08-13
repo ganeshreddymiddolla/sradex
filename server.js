@@ -58,38 +58,30 @@ app.get('/auth/google', (req, res) => {
 });
 
 // 2. Callback URL for Google to redirect to
+// In server.js, find the /auth/google/callback route and replace its content
+
 app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    if (!code) {
-        return res.status(400).send('Error: No code received from Google.');
-    }
+    // ... (keep the code that gets code, tokenData, and profileData)
+
     try {
-        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                code,
-                client_id: GOOGLE_CLIENT_ID,
-                client_secret: GOOGLE_CLIENT_SECRET,
-                redirect_uri: REDIRECT_URI,
-                grant_type: 'authorization_code',
-            }),
-        });
-        const tokenData = await tokenResponse.json();
-        if (tokenData.error) {
-            throw new Error(`Google token error: ${tokenData.error_description}`);
-        }
-        const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
-        });
+        // ... (your existing code to get profileData from Google)
+
         const profileData = await profileResponse.json();
-        req.session.user = {
-            id: profileData.id,
-            name: profileData.name,
-            email: profileData.email,
-            picture: profileData.picture,
-        };
-        res.redirect(`${FRONTEND_URL}/profile.html`);
+
+        // **NEW CODE STARTS HERE**
+        // Instead of creating a Node.js session, we redirect to a PHP handler
+        // to create a PHP session and save the user to the database.
+        const phpHandlerUrl = new URL(`${FRONTEND_URL}/google_auth_handler.php`);
+        
+        // Pass user data as query parameters
+        phpHandlerUrl.searchParams.append('google_id', profileData.id);
+        phpHandlerUrl.searchParams.append('name', profileData.name);
+        phpHandlerUrl.searchParams.append('email', profileData.email);
+        phpHandlerUrl.searchParams.append('picture', profileData.picture);
+
+        // Redirect the user's browser to the PHP script
+        res.redirect(phpHandlerUrl.toString());
+
     } catch (error) {
         console.error('Error during Google OAuth callback:', error);
         res.status(500).redirect(`${FRONTEND_URL}/login.html?error=auth_failed`);
