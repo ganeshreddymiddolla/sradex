@@ -5,7 +5,7 @@ const session = require("express-session");
 const cookieParser = require("cookie-parser");
  
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; 
  
 // SITE CONFIG
 const SITE_URL = process.env.SITE_URL || `http://localhost:${PORT}`;
