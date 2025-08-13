@@ -1,19 +1,16 @@
 {
-  "name": "sradex-google-singleorigin",
+  "name": "sradex-google-auth",
   "version": "1.0.0",
-  "description": "SRadex Google OAuth demo (single-origin) - backend serves frontend",
   "main": "server.js",
-  "engines": {
-    "node": "18.x"
-  },
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "cookie-parser": "^1.4.6",
-    "dotenv": "^16.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "node-fetch": "^2.6.7"
+    "cookie-parser": "^1.4.6",
+    "node-fetch": "^2.6.12"
   }
 }
