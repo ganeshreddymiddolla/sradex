@@ -1,144 +1,147 @@
-const express = require("express");
-const fetch = require("node-fetch");
-const cors = require("cors");
-const session = require("express-session");
-const cookieParser = require("cookie-parser");
+const express = require('express');
+const session = require('express-session');
+const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- CONFIGURATION ---
-// Use Render's external URL in production, otherwise default to localhost.
-const SITE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-const REDIRECT_URI = `${SITE_URL}/auth/google/callback`;
+// IMPORTANT: Replace with your actual frontend and backend URLs
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500'; // URL of your live frontend
+const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
 
+// Your Google OAuth Credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
+// The exact URL Google will redirect to after authentication
+const REDIRECT_URI = `${BACKEND_URL}/auth/google/callback`;
+
+// Check for essential environment variables
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET) {
-  console.error("❌ Missing required environment variables.");
-  process.exit(1);
+    console.error('FATAL ERROR: Missing essential environment variables.');
+    process.exit(1);
 }
 
-// In-memory user store (for demonstration purposes)
-const users = {};
-
-// --- MIDDLEWARES ---
+// --- MIDDLEWARE SETUP ---
+// Enable CORS for your frontend
 app.use(cors({
-  origin: "https://sradexlearning.com", // Your frontend URL
-  credentials: true
+    origin: FRONTEND_URL,
+    credentials: true,
 }));
-app.use(express.json());
-app.use(cookieParser());
+
+// Session middleware configuration
 app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true, // Requires HTTPS
-    httpOnly: true,
-    sameSite: "none", // Essential for cross-site cookies
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false, // Don't create session until something stored
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        httpOnly: true, // Prevents client-side JS from accessing the cookie
+        sameSite: 'lax', // Or 'none' if your frontend and backend are on different domains in prod
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
 }));
 
-// --- ROUTES ---
-
-// 1. Start Google OAuth flow
-app.get("/auth/google", (req, res) => {
-  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
-  authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "openid profile email");
-  authUrl.searchParams.set("access_type", "offline");
-  
-  console.log("Redirecting to Google:", authUrl.toString());
-  res.redirect(authUrl.toString());
-});
-
-// 2. Google OAuth callback handler
-app.get("/auth/google/callback", async (req, res) => {
-  const { code } = req.query;
-  if (!code) {
-    return res.redirect("https://sradexlearning.com/sampleloginbuttun.html?error=NoCode");
-  }
-
-  try {
-    // Exchange authorization code for tokens
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
-        grant_type: "authorization_code"
-      })
-    });
-
-    const tokenData = await tokenRes.json();
-    if (tokenData.error || !tokenData.access_token) {
-      throw new Error(`Token exchange failed: ${tokenData.error_description || 'No access token'}`);
-    }
-
-    // Fetch user profile from Google
-    const profileRes = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    const profile = await profileRes.json();
-
-    // Store user data and create a session
-    users[profile.id] = {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      photoUrl: profile.picture
-    };
-
-    req.session.userId = profile.id;
-    
-    // Redirect to the profile page on success
-    res.redirect("https://sradexlearning.com/sampleprofile.html");
-
-  } catch (err) {
-    console.error("❌ OAuth Callback Error:", err);
-    res.redirect("https://sradexlearning.com/sampleloginbuttun.html?error=OAuthFailed");
-  }
-});
-
-// 3. Logout
-app.get("/auth/logout", (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-        console.error("Logout error:", err);
-    }
-    res.clearCookie("connect.sid"); // The default session cookie name
-    res.redirect("https://sradexlearning.com/sampleloginbuttun.html");
-  });
-});
-
-// Middleware to protect routes
+// A simple middleware to check if the user is authenticated
 const isLoggedIn = (req, res, next) => {
-  if (req.session.userId) {
-    return next();
-  }
-  res.status(401).json({ error: "Unauthorized" });
+    if (req.session.user) {
+        return next();
+    }
+    res.status(401).json({ error: 'Unauthorized: You must be logged in.' });
 };
 
-// 4. API to get the logged-in user's profile
-app.get("/api/profile", isLoggedIn, (req, res) => {
-  const user = users[req.session.userId];
-  if (!user) {
-    // This can happen if the server restarts and the in-memory 'users' object is cleared
-    return res.status(404).json({ error: "User not found, please log in again." });
-  }
-  res.json(user);
+
+// --- AUTHENTICATION ROUTES ---
+
+// 1. Redirect to Google's OAuth consent screen
+app.get('/auth/google', (req, res) => {
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=profile email`;
+    res.redirect(url);
 });
 
+// 2. Callback URL for Google to redirect to
+app.get('/auth/google/callback', async (req, res) => {
+    const { code } = req.query;
+
+    if (!code) {
+        return res.status(400).send('Error: No code received from Google.');
+    }
+
+    try {
+        // Exchange authorization code for an access token
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                code,
+                client_id: GOOGLE_CLIENT_ID,
+                client_secret: GOOGLE_CLIENT_SECRET,
+                redirect_uri: REDIRECT_URI,
+                grant_type: 'authorization_code',
+            }),
+        });
+
+        const tokenData = await tokenResponse.json();
+        
+        if (tokenData.error) {
+            throw new Error(`Google token error: ${tokenData.error_description}`);
+        }
+
+        // Use the access token to get user's profile info
+        const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: {
+                Authorization: `Bearer ${tokenData.access_token}`,
+            },
+        });
+
+        const profileData = await profileResponse.json();
+
+        // Store user information in the session
+        req.session.user = {
+            id: profileData.id,
+            name: profileData.name,
+            email: profileData.email,
+            picture: profileData.picture,
+        };
+
+        // Redirect user to their profile page on the frontend
+        res.redirect(`${FRONTEND_URL}/profile.html`);
+
+    } catch (error) {
+        console.error('Error during Google OAuth callback:', error);
+        res.status(500).redirect(`${FRONTEND_URL}/login.html?error=auth_failed`);
+    }
+});
+
+// 3. Logout route
+app.get('/auth/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send('Could not log out.');
+        }
+        res.clearCookie('connect.sid'); // Clears the session cookie
+        res.redirect(FRONTEND_URL + '/login.html');
+    });
+});
+
+
+// --- API ROUTES ---
+
+// An API endpoint to get the current logged-in user's data
+// The 'isLoggedIn' middleware protects this route
+app.get('/api/me', isLoggedIn, (req, res) => {
+    res.json(req.session.user);
+});
+
+// --- SERVER START ---
 app.listen(PORT, () => {
-  console.log(`✅ Server running at ${SITE_URL}`);
-  console.log(`🔑 Redirect URI configured as: ${REDIRECT_URI}`);
+    console.log(`✅ Server is running on port ${PORT}`);
+    console.log(`🔑 Backend URL: ${BACKEND_URL}`);
+    console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
+    console.log(`🔗 Redirect URI: ${REDIRECT_URI}`);
 });
